@@ -216,13 +216,15 @@ class LeadClient:
             )
             return []
 
-    def update_lead_status(self, lead_id: str, new_status: str) -> bool:
+    def update_lead_status(self, lead_id: str, new_status: str, lead_name: str = None, lead_email: str = None) -> bool:
         """
         Update lead status in Google Sheets
 
         Args:
-            lead_id: Lead ID (generated from Name+Email)
+            lead_id: Lead ID (can be Name_Email or numeric ID)
             new_status: New status value (New, Contacted, Qualified, Closed)
+            lead_name: Optional lead name for additional lookup method
+            lead_email: Optional lead email for additional lookup method
 
         Returns:
             True if successful, False otherwise
@@ -232,10 +234,16 @@ class LeadClient:
             
             # Get headers to find Status column
             headers = self._retry_on_rate_limit(self.worksheet.row_values, HEADER_ROW)
+            logger.info(
+                f"Headers found: {headers}",
+                extra={"extra_data": {"headers": headers}},
+            )
+            
             status_column = None
             
+            # Look for status column (case-insensitive)
             for idx, header in enumerate(headers, start=1):
-                if header.lower() == "status":
+                if header.lower().strip() == "status":
                     status_column = idx
                     break
             
@@ -245,32 +253,91 @@ class LeadClient:
                     extra={"extra_data": {"headers": headers}},
                 )
                 return False
+            
+            logger.info(f"Status column found at index: {status_column}")
 
             records = self._retry_on_rate_limit(self.worksheet.get_all_records)
+            logger.info(
+                f"Total records in sheet: {len(records)}",
+                extra={"extra_data": {"record_count": len(records)}},
+            )
 
             for idx, record in enumerate(records, start=2):  # Start at 2 (skip header)
-                # Match by Name+Email ID
-                record_id = str(record.get("Name", "") + "_" + record.get("Email", ""))[:20]
-                if record_id == str(lead_id):
+                # Get record details - try both lowercase and capitalized column names
+                record_name = record.get("name", record.get("Name", ""))
+                record_email = record.get("email", record.get("Email", ""))
+                record_id = record.get("id", record.get("ID", ""))
+                
+                logger.debug(
+                    f"Checking record {idx}: id={record_id}, name={record_name}, email={record_email}",
+                    extra={"extra_data": {"row": idx, "id": record_id, "name": record_name, "email": record_email}},
+                )
+                
+                # Method 1: Try matching by id column (convert both to string for comparison)
+                if str(record_id).strip() and str(record_id).strip() == str(lead_id).strip():
+                    logger.info(f"✓ Match found using Method 1 (id column) at row {idx}")
                     self._retry_on_rate_limit(
                         self.worksheet.update_cell, idx, status_column, new_status
                     )
                     logger.info(
-                        f"Updated lead {lead_id} status to {new_status}",
-                        extra={"extra_data": {"lead_id": lead_id, "status": new_status}},
+                        f"✓ Updated lead {lead_id} status to {new_status}",
+                        extra={"extra_data": {"lead_id": lead_id, "status": new_status, "method": "id_column", "row": idx}},
                     )
                     return True
+                
+                # Method 2: Try matching by name+email format (Name_Email)
+                if record_name and record_email:
+                    generated_record_id = str(record_name + "_" + record_email)[:20].strip()
+                    generated_lead_id = str(lead_id)[:20].strip()
+                    
+                    logger.debug(
+                        f"Comparing generated IDs - Record: '{generated_record_id}' vs Lead: '{generated_lead_id}'",
+                        extra={"extra_data": {"generated_record_id": generated_record_id, "generated_lead_id": generated_lead_id}},
+                    )
+                    
+                    if generated_record_id == generated_lead_id:
+                        logger.info(f"✓ Match found using Method 2 (name+email) at row {idx}")
+                        self._retry_on_rate_limit(
+                            self.worksheet.update_cell, idx, status_column, new_status
+                        )
+                        logger.info(
+                            f"✓ Updated lead {lead_id} status to {new_status}",
+                            extra={"extra_data": {"lead_id": lead_id, "status": new_status, "method": "name_email", "row": idx}},
+                        )
+                        return True
+                
+                # Method 3: If name and email provided, try direct match
+                if lead_name and lead_email:
+                    name_match = record_name.strip().lower() == lead_name.strip().lower()
+                    email_match = record_email.strip().lower() == lead_email.strip().lower()
+                    
+                    if name_match and email_match:
+                        logger.info(f"✓ Match found using Method 3 (direct name+email match) at row {idx}")
+                        self._retry_on_rate_limit(
+                            self.worksheet.update_cell, idx, status_column, new_status
+                        )
+                        logger.info(
+                            f"✓ Updated lead {lead_id} status to {new_status}",
+                            extra={"extra_data": {"lead_id": lead_id, "status": new_status, "method": "direct_match", "row": idx}},
+                        )
+                        return True
 
             logger.warning(
-                f"Lead not found: {lead_id}",
-                extra={"extra_data": {"lead_id": lead_id}},
+                f"✗ Lead not found in any records",
+                extra={"extra_data": {
+                    "lead_id": lead_id, 
+                    "lead_name": lead_name, 
+                    "lead_email": lead_email, 
+                    "total_records": len(records),
+                    "searched_methods": ["id_column", "name_email_format", "direct_match"]
+                }},
             )
             return False
 
         except Exception as e:
             logger.error(
                 f"Failed to update lead: {str(e)}",
-                extra={"extra_data": {"lead_id": lead_id, "error": str(e)}},
+                extra={"extra_data": {"lead_id": lead_id, "error": str(e), "error_type": type(e).__name__}},
             )
             return False
 

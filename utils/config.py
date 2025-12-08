@@ -32,9 +32,9 @@ class Config:
     TRELLO_API_TOKEN = os.getenv("TRELLO_API_TOKEN", "")
     TRELLO_BOARD_ID = os.getenv("TRELLO_BOARD_ID", "")
     TRELLO_NEW_LIST_ID = os.getenv("TRELLO_NEW_LIST_ID", "")
-    TRELLO_IN_PROGRESS_LIST_ID = os.getenv("TRELLO_IN_PROGRESS_LIST_ID", "")
+    TRELLO_CONTACTED_LIST_ID = os.getenv("TRELLO_CONTACTED_LIST_ID", "")
     TRELLO_QUALIFIED_LIST_ID = os.getenv("TRELLO_QUALIFIED_LIST_ID", "")
-    TRELLO_DONE_LIST_ID = os.getenv("TRELLO_DONE_LIST_ID", "")
+    TRELLO_CLOSED_LIST_ID = os.getenv("TRELLO_CLOSED_LIST_ID", "")
     TRELLO_WEBHOOK_URL = os.getenv("TRELLO_WEBHOOK_URL", "")
 
     # Application
@@ -50,9 +50,9 @@ class Config:
     # Dynamically build mapping, skip empty IDs
     _raw_mapping = {
         "New": TRELLO_NEW_LIST_ID,
-        "In Progress": TRELLO_IN_PROGRESS_LIST_ID,
+        "Contacted": TRELLO_CONTACTED_LIST_ID,
         "Qualified": TRELLO_QUALIFIED_LIST_ID,
-        "Done": TRELLO_DONE_LIST_ID,
+        "Closed": TRELLO_CLOSED_LIST_ID,
     }
     # Filter out empty values to handle missing list IDs gracefully
     TRELLO_LIST_MAPPING = {k: v for k, v in _raw_mapping.items() if v}

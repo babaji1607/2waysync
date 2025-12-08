@@ -322,7 +322,7 @@ class TaskClient:
             data = {}
 
             if status:
-                list_id = self.list_mapping.get(status, self.list_mapping["TODO"])
+                list_id = self.list_mapping.get(status, self.list_mapping.get("New"))
                 data["idList"] = list_id
 
             if title:
